@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+google-auth
+google-auth-oauthlib
+google-api-python-client
+sqlalchemy
+requests
+python-multipart
+celery
+redis
+openpyxl
+itsdangerous
+cryptography
+psycopg2-binary
