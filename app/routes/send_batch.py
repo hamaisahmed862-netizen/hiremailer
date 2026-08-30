@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -31,22 +31,24 @@ def _verify_batch_ownership(batch_id: str, company: Company, db: Session):
 @router.post("/batch")
 def trigger_batch_send(
     payload: SendBatchRequest,
+    background_tasks: BackgroundTasks,
     company: Company = Depends(get_current_company),
     db: Session = Depends(get_db),
 ):
     """
-    Kicks off sending for an uploaded batch. Returns immediately —
-    actual sending happens in the background via Celery.
+    Kicks off sending for an uploaded batch. Returns immediately — actual
+    sending happens after the response, via FastAPI's BackgroundTasks.
     """
     _verify_batch_ownership(payload.batch_id, company, db)
 
-    result = send_batch_emails.delay(
+    background_tasks.add_task(
+        send_batch_emails,
         payload.batch_id,
         payload.subject_template,
         payload.body_template,
         payload.delay_seconds,
     )
-    return {"queued": True, "celery_task_id": result.id}
+    return {"queued": True}
 
 
 @router.get("/batch/{batch_id}/status")
@@ -79,8 +81,8 @@ def cancel_batch(
 ):
     """
     Stops a batch mid-send. Any applicant still 'pending' is marked
-    'cancelled' — already-queued Celery tasks check this status right
-    before sending and will skip instead of sending.
+    'cancelled' — the running background task checks this status right
+    before each send and will skip instead of sending.
     """
     _verify_batch_ownership(batch_id, company, db)
 

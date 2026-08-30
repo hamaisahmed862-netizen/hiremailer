@@ -7,8 +7,6 @@ google-api-python-client
 sqlalchemy
 requests
 python-multipart
-celery
-redis
 openpyxl
 itsdangerous
 cryptography
