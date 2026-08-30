@@ -11,3 +11,4 @@ openpyxl
 itsdangerous
 cryptography
 psycopg2-binary
+a2wsgi
