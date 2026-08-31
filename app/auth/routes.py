@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
-import requests
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport.requests import Request as GoogleAuthRequest
 
 from app.auth.oauth import get_flow
 from app.auth.session import create_session_token
+from app.config import GOOGLE_CLIENT_ID, FRONTEND_URL
 from app.db import get_db
 from app.models.company import Company
 
@@ -45,17 +47,19 @@ def google_callback(request: Request, db: Session = Depends(get_db)):
     granted_scopes = set(credentials.scopes or [])
     if "https://www.googleapis.com/auth/gmail.send" not in granted_scopes:
         return RedirectResponse(
-            "http://localhost:5173?connect_error="
+            f"{FRONTEND_URL}?connect_error="
             "Gmail send permission wasn't granted. Please reconnect and make "
             "sure to approve the 'send email on your behalf' permission."
         )
 
-    # Ask Google who this is, so we know which company record to save.
-    userinfo = requests.get(
-        "https://www.googleapis.com/oauth2/v2/userinfo",
-        headers={"Authorization": f"Bearer {credentials.token}"},
-    ).json()
-    email = userinfo.get("email")
+    # The ID token (included since we requested the 'openid' + 'email'
+    # scopes) already contains the user's email — no extra network call
+    # needed. Verified against Google's public keys using the same
+    # transport that already succeeded for the token exchange above.
+    id_info = google_id_token.verify_oauth2_token(
+        credentials.id_token, GoogleAuthRequest(), GOOGLE_CLIENT_ID
+    )
+    email = id_info.get("email")
 
     # Upsert: update if this company already connected before, else create.
     existing = db.query(Company).filter(Company.email == email).first()
@@ -79,5 +83,5 @@ def google_callback(request: Request, db: Session = Depends(get_db)):
     token = create_session_token(existing.id)
 
     return RedirectResponse(
-        f"http://localhost:5173?session_token={token}&connected_email={email}"
+        f"{FRONTEND_URL}?session_token={token}&connected_email={email}"
     )
