@@ -43,7 +43,11 @@ def send_email(company: Company, db: Session, to_email: str, subject: str, body:
     Returns Gmail's API response (contains the sent message id).
     """
     creds = get_valid_credentials(company, db)
-    service = build("gmail", "v1", credentials=creds)
+    # static_discovery=True avoids an extra network call to fetch API
+    # metadata from www.googleapis.com at runtime — uses the discovery
+    # document bundled with the library instead. This also avoids a
+    # network path that fails in some restricted hosting environments.
+    service = build("gmail", "v1", credentials=creds, static_discovery=True)
 
     message = MIMEText(body)
     message["to"] = to_email
