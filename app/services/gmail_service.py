@@ -1,8 +1,10 @@
 import base64
 from email.mime.text import MIMEText
 
+import httplib2
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request as GoogleRequest
+from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
 from sqlalchemy.orm import Session
 
@@ -43,11 +45,20 @@ def send_email(company: Company, db: Session, to_email: str, subject: str, body:
     Returns Gmail's API response (contains the sent message id).
     """
     creds = get_valid_credentials(company, db)
+
+    # googleapiclient uses httplib2 internally, which — unlike the
+    # `requests` library — doesn't automatically read http_proxy/https_proxy
+    # from the environment. Some hosts (like PythonAnywhere's free tier)
+    # require outbound traffic to go through a proxy, so we wire it in
+    # explicitly here using httplib2's own env-reading helper.
+    proxy_info = httplib2.proxy_info_from_environment(method="https")
+    http = httplib2.Http(proxy_info=proxy_info)
+    authed_http = AuthorizedHttp(creds, http=http)
+
     # static_discovery=True avoids an extra network call to fetch API
     # metadata from www.googleapis.com at runtime — uses the discovery
-    # document bundled with the library instead. This also avoids a
-    # network path that fails in some restricted hosting environments.
-    service = build("gmail", "v1", credentials=creds, static_discovery=True)
+    # document bundled with the library instead.
+    service = build("gmail", "v1", http=authed_http, static_discovery=True)
 
     message = MIMEText(body)
     message["to"] = to_email
