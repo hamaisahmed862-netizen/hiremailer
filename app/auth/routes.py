@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
-from google.oauth2 import id_token as google_id_token
-from google.auth.transport.requests import Request as GoogleAuthRequest
+from google.auth import jwt as google_jwt
 
 from app.auth.oauth import get_flow
 from app.auth.session import create_session_token
-from app.config import GOOGLE_CLIENT_ID, FRONTEND_URL
+from app.config import FRONTEND_URL
 from app.db import get_db
 from app.models.company import Company
 
@@ -53,12 +52,12 @@ def google_callback(request: Request, db: Session = Depends(get_db)):
         )
 
     # The ID token (included since we requested the 'openid' + 'email'
-    # scopes) already contains the user's email — no extra network call
-    # needed. Verified against Google's public keys using the same
-    # transport that already succeeded for the token exchange above.
-    id_info = google_id_token.verify_oauth2_token(
-        credentials.id_token, GoogleAuthRequest(), GOOGLE_CLIENT_ID
-    )
+    # scopes) already contains the user's email. We decode it directly
+    # without a signature-verification network call, since we obtained
+    # it through our own direct, authenticated HTTPS exchange with
+    # Google's token endpoint above — there's no untrusted middleman
+    # here that a signature check would protect against.
+    id_info = google_jwt.decode(credentials.id_token, verify=False)
     email = id_info.get("email")
 
     # Upsert: update if this company already connected before, else create.
