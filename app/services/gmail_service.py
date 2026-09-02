@@ -17,6 +17,7 @@ def get_valid_credentials(company: Company, db: Session) -> Credentials:
         client_id=GOOGLE_CLIENT_ID,
         client_secret=GOOGLE_CLIENT_SECRET,
         scopes=SCOPES,
+        expiry=company.token_expiry,
     )
 
     if creds.expired or not creds.token:
