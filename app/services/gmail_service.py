@@ -1,14 +1,9 @@
-import base64
-from email.mime.text import MIMEText
-
-import httplib2
+import requests
+from sqlalchemy.orm import Session
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request as GoogleRequest
-from google_auth_httplib2 import AuthorizedHttp
-from googleapiclient.discovery import build
-from sqlalchemy.orm import Session
 
-from app.config import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+from app.config import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, N8N_WEBHOOK_URL
 from app.models.company import Company
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
@@ -34,23 +29,16 @@ def get_valid_credentials(company: Company, db: Session) -> Credentials:
 
 
 def send_email(company: Company, db: Session, to_email: str, subject: str, body: str) -> dict:
+    # Token refresh still happens here, locally — unaffected by the block.
     creds = get_valid_credentials(company, db)
 
-    proxy_info = httplib2.proxy_info_from_environment(method="https")
-    http = httplib2.Http(proxy_info=proxy_info)
-    authed_http = AuthorizedHttp(creds, http=http)
+    payload = {
+        "access_token": creds.token,
+        "to_email": to_email,
+        "subject": subject,
+        "body": body,
+    }
 
-    service = build("gmail", "v1", http=authed_http, static_discovery=True)
-
-    message = MIMEText(body)
-    message["to"] = to_email
-    message["subject"] = subject
-
-    raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-
-    sent = service.users().messages().send(
-        userId="me",
-        body={"raw": raw_message},
-    ).execute()
-
-    return sent
+    response = requests.post(N8N_WEBHOOK_URL, json=payload, timeout=30)
+    response.raise_for_status()
+    return response.json()
