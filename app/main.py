@@ -16,8 +16,9 @@ from app.routes.send import router as send_router
 from app.routes.applicants import router as applicants_router
 from app.routes.send_batch import router as send_batch_router
 from app.routes.company import router as company_router
+from app.routes.n8n_bridge import router as n8n_bridge_router
 from app.db import Base, engine
-from app.models import company, applicant  # noqa: F401 — needed so tables are registered
+from app.models import company, applicant, batch  # noqa: F401 — needed so tables are registered
 
 Base.metadata.create_all(bind=engine)
 
@@ -39,6 +40,7 @@ app.include_router(send_router)
 app.include_router(applicants_router)
 app.include_router(send_batch_router)
 app.include_router(company_router)
+app.include_router(n8n_bridge_router)
 
 
 @app.get("/")

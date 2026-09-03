@@ -10,3 +10,4 @@ SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY", "dev-only-change-this-befor
 TOKEN_ENCRYPTION_KEY = os.getenv("TOKEN_ENCRYPTION_KEY")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
+N8N_SHARED_SECRET = os.getenv("N8N_SHARED_SECRET")

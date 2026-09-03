@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.tasks.send_tasks import send_batch_emails
 from app.db import get_db
 from app.models.applicant import Applicant
 from app.models.company import Company
+from app.models.batch import Batch
 from app.auth.session import get_current_company
 
 router = APIRouter(prefix="/send", tags=["send"])
@@ -15,7 +15,7 @@ class SendBatchRequest(BaseModel):
     batch_id: str
     subject_template: str
     body_template: str
-    delay_seconds: int = 3  # gap between each send, in seconds
+    delay_seconds: int = 3  # kept for frontend compatibility; no longer used internally
 
 
 def _verify_batch_ownership(batch_id: str, company: Company, db: Session):
@@ -31,23 +31,29 @@ def _verify_batch_ownership(batch_id: str, company: Company, db: Session):
 @router.post("/batch")
 def trigger_batch_send(
     payload: SendBatchRequest,
-    background_tasks: BackgroundTasks,
     company: Company = Depends(get_current_company),
     db: Session = Depends(get_db),
 ):
     """
-    Kicks off sending for an uploaded batch. Returns immediately — actual
-    sending happens after the response, via FastAPI's BackgroundTasks.
+    Saves the batch's subject/body template so n8n can pick it up.
+    No longer sends anything itself — n8n polls for pending applicants
+    (via /n8n/pending-emails) and sends them via Gmail directly.
     """
     _verify_batch_ownership(payload.batch_id, company, db)
 
-    background_tasks.add_task(
-        send_batch_emails,
-        payload.batch_id,
-        payload.subject_template,
-        payload.body_template,
-        payload.delay_seconds,
-    )
+    existing = db.query(Batch).filter(Batch.id == payload.batch_id).first()
+    if existing:
+        existing.subject_template = payload.subject_template
+        existing.body_template = payload.body_template
+    else:
+        db.add(Batch(
+            id=payload.batch_id,
+            company_id=company.id,
+            subject_template=payload.subject_template,
+            body_template=payload.body_template,
+        ))
+    db.commit()
+
     return {"queued": True}
 
 
@@ -81,8 +87,8 @@ def cancel_batch(
 ):
     """
     Stops a batch mid-send. Any applicant still 'pending' is marked
-    'cancelled' — the running background task checks this status right
-    before each send and will skip instead of sending.
+    'cancelled' — n8n's polling query only picks up 'pending' applicants,
+    so this will be skipped on the next poll.
     """
     _verify_batch_ownership(batch_id, company, db)
 
